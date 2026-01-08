@@ -1,4 +1,3 @@
-from io import StringIO
 from pathlib import Path
 
 import numpy as np
@@ -6,7 +5,7 @@ import pytest
 
 from opi.input.structures import Structure
 from opi.utils.element import Element
-from opi.utils.textio import TrackingTextIO
+from opi.utils.tracking_text_io import TrackingTextIO
 
 
 @pytest.fixture
@@ -55,7 +54,7 @@ Coordinates from ORCA-job job_MEP E  -7.334880224742
 def xyz_buffer_single_structure(xyz_single_file: Path):
     """Returns a test buffer of a single structure .xyz file"""
     with xyz_single_file.open("r") as f:
-        tracking_text = TrackingTextIO(StringIO(f.read()))
+        tracking_text = TrackingTextIO(f.read())
 
     return tracking_text
 
@@ -116,7 +115,7 @@ def test_from_trj_xyz_correct_number_of_structures(xyz_multi_file: Path):
 
 def test_from_trj_xyz_struc_limit(xyz_multi_file: Path):
     """Test to check if `struc_limit` parameter is enforced correctly"""
-    structures = Structure.from_trj_xyz(xyz_multi_file, struc_limit=1)
+    structures = Structure.from_trj_xyz(xyz_multi_file, n_struc_limit=1)
     assert len(structures) == 1
 
 
@@ -134,9 +133,9 @@ def test_from_xyz_buffer(xyz_buffer_single_structure):
 
 
 def test_from_xyz_buffer_empty():
-    """Test to check if `Structure.from_xyz_buffer()` returns None in case of empty buffer."""
-    structure = Structure.from_xyz_buffer(TrackingTextIO(StringIO("")))
-    assert not structure
+    """Test to check if `Structure.from_xyz_buffer()` raises EOFError in case of empty buffer."""
+    with pytest.raises(EOFError):
+        Structure.from_xyz_buffer(TrackingTextIO(""))
 
 
 def test_from_xyz_buffer_raises_on_invalid_header():
@@ -145,6 +144,6 @@ def test_from_xyz_buffer_raises_on_invalid_header():
 Comment line
 O 0.0 0.0 0.0
 """
-    buffer = TrackingTextIO(StringIO(xyz_text))
+    buffer = TrackingTextIO(xyz_text)
     with pytest.raises(ValueError):
         Structure.from_xyz_buffer(buffer)

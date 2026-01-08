@@ -1,5 +1,5 @@
 import re
-from io import StringIO
+from collections.abc import Iterator
 from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Sequence, cast
@@ -20,7 +20,7 @@ from opi.input.structures.atom import (
 )
 from opi.input.structures.coordinates import Coordinates
 from opi.utils.element import Element
-from opi.utils.textio import TrackingTextIO
+from opi.utils.tracking_text_io import TrackingTextIO
 
 __all__ = ("Structure",)
 
@@ -403,10 +403,9 @@ class Structure:
         `Structure`:`Structure object extracted from file
         """
         structures = cls.from_trj_xyz(
-            xyzfile, charge=charge, multiplicity=multiplicity, struc_limit=1
+            xyzfile, charge=charge, multiplicity=multiplicity, n_struc_limit=1
         )
-        structure = structures[0]
-        return structure
+        return structures[0]
 
     @classmethod
     def from_trj_xyz(
@@ -417,7 +416,7 @@ class Structure:
         charge: int = 0,
         multiplicity: int = 1,
         comment_symbols: str | Sequence[str] | None = None,
-        struc_limit: int | None = None,
+        n_struc_limit: int | None = None,
     ) -> "list[Structure]":
         """
         Function for reading a xyz trajectory file and converting it to a list of molecular Structure
@@ -425,7 +424,7 @@ class Structure:
         Parameters
         ----------
         trj_file : Path | str | PathLike[str]
-            Name or path to xyz file with multiple structures
+            Name or path to xyz file with one or multiple structure(s)
         charge : int, default: 0
             Charge of the molecule
         multiplicity : int, default: 1
@@ -434,22 +433,22 @@ class Structure:
             List of symbols that indicate user comments in the xyz file. User comments are skipped before the actual xyz
             data starts. By default, no user comments are used. White-space only comments are not allowed and are
             silently ignored.
-        struc_limit: int | None, default: None
-            Limit of structures that should be read from the trj.xyz file. With the default, None, all structures are
-            read.
+        n_struc_limit: int | None, default: None
+            If >0, only read the first n structures.
 
         Raises
         --------
         FileNotFoundError
-            If the XYZ file cannot be found
+            If the XYZ file cannot be found.
         ValueError
-            If there is a problem with parsing the XYZ file
+            If there is a problem with parsing the XYZ file.
+        EOFError
+            If the file is empty.
 
         Returns
         --------
-        `list[Structure]`:`Molecular structure objects extracted from the xyz file
+        list[Structure]: Molecular structure objects extracted from the xyz file.
         """
-        structures: list[Structure] = []
         # > converting into Path
         trj_file = Path(trj_file)
 
@@ -457,29 +456,19 @@ class Structure:
         if not trj_file.exists():
             raise FileNotFoundError(f"XYZ file not found: {trj_file}")
 
-        with trj_file.open() as f_xyz:
-            tracked = TrackingTextIO(f_xyz)
-            n_struc: int = 0
-            while True:
-                try:
-                    structure = cls.from_xyz_buffer(
-                        tracked,
-                        charge=charge,
-                        multiplicity=multiplicity,
-                        comment_symbols=comment_symbols,
-                    )
-                    if structure is None:
-                        break
-                    structure.origin = trj_file.expanduser().resolve()
-                    structures.append(structure)
-                except ValueError:
-                    raise
-                n_struc += 1
-                # > Break if limit of allowed structures is reached
-                if struc_limit is not None and n_struc >= struc_limit:
-                    break
-
-        return structures
+        with TrackingTextIO(trj_file.open()) as tracked:
+            structures = list(
+                cls._iter_xyz_structures(
+                    tracked,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    comment_symbols=comment_symbols,
+                    n_struc_limit=n_struc_limit,
+                )
+            )
+            if not structures:
+                raise EOFError(f"XYZ file {trj_file} is empty")
+            return structures
 
     @classmethod
     def from_xyz_block(
@@ -512,10 +501,9 @@ class Structure:
         Structure
             The `Structure` object extracted from file
         """
-        structures = cls.from_trj_xyz_block(
-            xyz_string, charge=charge, multiplicity=multiplicity, struc_limit=1
-        )
-        return structures[0]
+        return cls.from_trj_xyz_block(
+            xyz_string, charge=charge, multiplicity=multiplicity, n_struc_limit=1
+        )[0]
 
     @classmethod
     def from_trj_xyz_block(
@@ -526,15 +514,15 @@ class Structure:
         charge: int = 0,
         multiplicity: int = 1,
         comment_symbols: str | Sequence[str] | None = None,
-        struc_limit: int | None = None,
+        n_struc_limit: int | None = None,
     ) -> "list[Structure]":
         """
-        Function for reading a xyz trajectory data string and converting it to a list of molecular Structure
+        Function for reading a XYZ trajectory data string and converting it to a list of molecular Structure
 
         Parameters
         ----------
         trj_string : Path | str | PathLike[str]
-            String that contains multiple xyz file data (trajectory data)
+            String that contains multiple xyz blocks (trajectory data)
         charge : int, default: 0
             Charge of the molecule
         multiplicity : int, default: 1
@@ -543,37 +531,31 @@ class Structure:
             List of symbols that indicate user comments in the xyz file. User comments are skipped before the actual xyz
             data starts. By default, no user comments are used. White-space only comments are not allowed and are
             silently ignored.
-        struc_limit: int | None, default: None
-            Limit of structures that should be read from the trj.xyz string. With the default, None, all structures are
-            read.
+        n_struc_limit: int | None, default: None
+            If >0, only read the first n structures.
 
         Returns
         --------
-        `list[Structure]`:`Structure objects extracted from file
-        """
-        structures: list[Structure] = []
+        list[Structure]: `Structure objects extracted from file
 
-        with StringIO(trj_string) as f_xyz:
-            tracked = TrackingTextIO(f_xyz)
-            n_struc: int = 0
-            while True:
-                try:
-                    structure = cls.from_xyz_buffer(
-                        tracked,
-                        charge=charge,
-                        multiplicity=multiplicity,
-                        comment_symbols=comment_symbols,
-                    )
-                    if structure is None:
-                        break
-                    structures.append(structure)
-                except ValueError:
-                    raise
-                n_struc += 1
-                # > Break if limit of allowed structures is reached
-                if struc_limit is not None and n_struc >= struc_limit:
-                    break
-        return structures
+        Raises
+        --------
+        EOFError
+            If the string is empty
+        """
+        with TrackingTextIO(trj_string) as tracked:
+            structures = list(
+                cls._iter_xyz_structures(
+                    tracked,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    comment_symbols=comment_symbols,
+                    n_struc_limit=n_struc_limit,
+                )
+            )
+            if not structures:
+                raise EOFError("XYZ string is empty")
+            return structures
 
     @classmethod
     def from_xyz_buffer(
@@ -583,7 +565,7 @@ class Structure:
         charge: int = 0,
         multiplicity: int = 1,
         comment_symbols: str | Sequence[str] | None = None,
-    ) -> "Structure | None":
+    ) -> "Structure":
         """
         Function for reading a xyz file from a buffer and converting it to a molecular Structure.
 
@@ -600,15 +582,17 @@ class Structure:
             data starts. By default, no user comments are used. White-space only comments are not allowed and are
             silently ignored.
 
+        Returns
+        --------
+        Structure
+            The `Structure` object extracted from the buffer.
+
         Raises
         --------
         ValueError
-            When no valid structure can be read from the input buffer
-
-        Returns
-        --------
-        Structure | None
-            The `Structure` object extracted from the buffer or None if the buffer was empty.
+            When no valid structure can be read from the input buffer.
+        EOFError
+            When no data is in the buffer.
         """
         # > Try reading the string
         atoms: list[Atom] = []
@@ -629,9 +613,8 @@ class Structure:
             else:
                 break
 
-        # > No data available in the buffer
-        if line == "":
-            return None
+        if not line:
+            raise EOFError("No data available in the buffer.")
 
         # > Fetch number of atoms
         try:
@@ -650,7 +633,7 @@ class Structure:
         pos = xyz_lines.tell()
 
         # Read the atoms
-        while (line := xyz_lines.readline()) != "":
+        while line := xyz_lines.readline():
             # > Line should have at least 4 columns
             atom_cols = line.split()
 
@@ -1026,3 +1009,60 @@ class Structure:
             atoms.append(Atom(element=element, coordinates=coords))
 
         return cls(atoms=atoms, charge=charge, multiplicity=multiplicity)
+
+    @classmethod
+    def _iter_xyz_structures(
+        cls,
+        tracked: TrackingTextIO,
+        charge: int = 0,
+        multiplicity: int = 1,
+        comment_symbols: str | Sequence[str] | None = None,
+        n_struc_limit: int | None = None,
+    ) -> Iterator["Structure"]:
+        """
+        Yield properties from the buffer until exhausted or the limit is reached.
+
+        Parameters
+        ----------
+        tracked: TrackingTextIO
+            A buffer that contains XYZ file data.
+        charge : int, default:  0
+            Optional charge for the structure
+        multiplicity : int, default:  1
+            Optional multiplicity for the structure
+        comment_symbols: str | Sequence[str] | None, default: None
+            List of symbols that indicate user comments in the XYZ data.
+            User comments have to start with the given symbol, fill a whole line, and come before the actual XYZ data.
+        n_struc_limit: int | None, default: None
+            If >0, only read the first n structures.
+
+        Returns
+        --------
+        Iterator["Structure"]
+            Iterator of `Structure` object extracted from the buffer.
+
+        Raises
+        --------
+        ValueError
+            If `n_struc_limit` is negative or zero.
+
+        """
+
+        if n_struc_limit is not None and n_struc_limit < 0:
+            raise ValueError("n_struc_limit must be None, 0, or a positive integer")
+
+        n_struc = 0
+        while True:
+            try:
+                struct = cls.from_xyz_buffer(
+                    tracked,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                    comment_symbols=comment_symbols,
+                )
+            except EOFError:
+                break
+            yield struct
+            n_struc += 1
+            if n_struc_limit and n_struc >= n_struc_limit:
+                break
