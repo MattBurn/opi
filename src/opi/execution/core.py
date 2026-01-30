@@ -15,7 +15,7 @@ from contextlib import nullcontext
 from io import TextIOWrapper
 from pathlib import Path
 from subprocess import CompletedProcess
-from typing import Any, Callable, Sequence, TypeVar, cast
+from typing import Any, Callable, Concatenate, ParamSpec, Sequence, TypeVar, cast
 
 from opi import ORCA_MINIMAL_VERSION
 from opi.lib.orca_binary import OrcaBinary
@@ -23,10 +23,11 @@ from opi.utils.config import get_config
 from opi.utils.misc import add_to_env, check_minimal_version, delete_empty_file, resolve_binary_name
 from opi.utils.orca_version import OrcaVersion
 
+RunnerType = TypeVar("RunnerType", bound="Runner")
+P = ParamSpec("P")
 R = TypeVar("R")
 
-
-def _orca_environment(runner: Callable[..., R], /) -> Callable[..., R]:
+def _orca_environment(runner: Callable[Concatenate[RunnerType, P], R], /) -> Callable[Concatenate[RunnerType, P], R]:
     """
     Wrapper that temporarily modifies environment, to ensure that the correct ORCA and OpenMPI installation are found.
     Resets environment upon exiting.
@@ -37,7 +38,7 @@ def _orca_environment(runner: Callable[..., R], /) -> Callable[..., R]:
         Function that is to be wrapped.
     """
 
-    def wrapper(self: "Runner", *args: Any, **kwargs: Any) -> R:
+    def wrapper(self: RunnerType, *args: Any, **kwargs: Any) -> R:
         org_env = os.environ.copy()
         try:
             # //////////////////////////////
