@@ -38,7 +38,7 @@ def _orca_environment(runner: Callable[Concatenate[RunnerType, P], R], /) -> Cal
         Function that is to be wrapped.
     """
 
-    def wrapper(self: RunnerType, *args: Any, **kwargs: Any) -> R:
+    def wrapper(self: RunnerType, /, *args: Any, **kwargs: Any) -> R:
         org_env = os.environ.copy()
         try:
             # //////////////////////////////
