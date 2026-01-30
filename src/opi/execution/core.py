@@ -27,7 +27,10 @@ RunnerType = TypeVar("RunnerType", bound="Runner")
 P = ParamSpec("P")
 R = TypeVar("R")
 
-def _orca_environment(runner: Callable[Concatenate[RunnerType, P], R], /) -> Callable[Concatenate[RunnerType, P], R]:
+
+def _orca_environment(
+    runner: Callable[Concatenate[RunnerType, P], R], /
+) -> Callable[Concatenate[RunnerType, P], R]:
     """
     Wrapper that temporarily modifies environment, to ensure that the correct ORCA and OpenMPI installation are found.
     Resets environment upon exiting.
