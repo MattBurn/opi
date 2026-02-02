@@ -163,6 +163,8 @@ class Block(BaseModel, ABC):
                     continue
                 elif isinstance(value, SimpleKeyword):
                     s += f'    {key} "{str(value).lower()}"\n'  # add quotations if value is of type SimpleKeyword
+                elif isinstance(value, InputFilePath):
+                    s += f"    {key} {str(value)}\n"  # don't convert file paths to lowercase
                 else:
                     s += f"    {key} {str(value).lower()}\n"  # print key value pairs
         s += "end"
