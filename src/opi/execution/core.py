@@ -37,7 +37,7 @@ def _orca_environment(
 
     Parameters
     ----------
-    runner : Callable[..., R]
+    runner : Callable[Concatenate[RunnerType, P], R]
         Function that is to be wrapped.
     """
 
