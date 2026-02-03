@@ -33,7 +33,7 @@ class BaseStructureFile(ABC):
         *,
         charge: int = 0,
         multiplicity: int = 1,
-        strict=True
+        strict: bool = True,
     ):
         self._strict = strict
         self._file: Path
