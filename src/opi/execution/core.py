@@ -1,10 +1,5 @@
 """
 Module that contains `Runner` class which facilities execution of ORCA binaries.
-
-Attributes
-----------
-R:
-    Helper variable for type annotation.
 """
 
 import json
